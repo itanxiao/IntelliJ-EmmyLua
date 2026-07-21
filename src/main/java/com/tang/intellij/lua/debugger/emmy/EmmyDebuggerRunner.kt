@@ -37,13 +37,14 @@ class EmmyDebuggerRunner : LuaRunner() {
         return DefaultDebugExecutor.EXECUTOR_ID == executorId && runProfile is EmmyDebugConfiguration
     }
 
-    override fun doExecute(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor {
+    override fun doExecute(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor? {
         val manager = XDebuggerManager.getInstance(environment.project)
-        val session = manager.startSession(environment, object : XDebugProcessStarter() {
+        val session = manager.newSessionBuilder(object : XDebugProcessStarter() {
             override fun start(session: XDebugSession): XDebugProcess {
                 return EmmyDebugProcess(session)
             }
         })
+            .environment(environment).startSession()
         return session.runContentDescriptor
     }
 }

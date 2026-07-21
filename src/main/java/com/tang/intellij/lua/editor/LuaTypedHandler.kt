@@ -41,7 +41,7 @@ class LuaTypedHandler : TypedHandlerDelegate() {
     override fun checkAutoPopup(charTyped: Char, project: Project, editor: Editor, file: PsiFile): Result {
         if (file.fileType == LuaFileType.INSTANCE) {
             if (charTyped == ':' || charTyped == '@') {
-                AutoPopupController.getInstance(project).autoPopupMemberLookup(editor, null)
+                AutoPopupController.getInstance(project).scheduleAutoPopup(editor, null)
                 return Result.STOP
             }
             if (charTyped == '.') {

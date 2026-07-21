@@ -16,13 +16,13 @@
 
 import de.undercouch.gradle.tasks.download.Download
 import org.apache.tools.ant.taskdefs.condition.Os
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import java.io.ByteArrayOutputStream
 
 plugins {
-    id("org.jetbrains.intellij.platform") version "2.7.0"
-    id("org.jetbrains.kotlin.jvm").version("2.3.0")
+    id("org.jetbrains.intellij.platform") version "2.18.1"
+    id("org.jetbrains.kotlin.jvm").version("2.4.0")
     id("de.undercouch.download").version("5.3.0")
 }
 
@@ -34,7 +34,7 @@ data class BuildData(
     val untilBuild: String,
     val archiveName: String = "IntelliJ-EmmyLua",
     val jvmTarget: String = "1.8",
-    val targetCompatibilityLevel: JavaVersion = JavaVersion.VERSION_11,
+    val targetCompatibilityLevel: JavaVersion = JavaVersion.VERSION_25,
     val explicitJavaDependency: Boolean = true,
     val bunch: String = ideaSDKShortVersion,
     // https://github.com/JetBrains/gradle-intellij-plugin/issues/403#issuecomment-542890849
@@ -43,13 +43,13 @@ data class BuildData(
 
 val buildDataList = listOf(
     BuildData(
-        ideaSDKShortVersion = "2026.1",
-        ideaSDKVersion = "2026.1",
+        ideaSDKShortVersion = "2026.2",
+        ideaSDKVersion = "2026.2",
         sinceBuild = "253",
-        untilBuild = "261.*",
+        untilBuild = "262.*",
         bunch = "212",
-        targetCompatibilityLevel = JavaVersion.VERSION_21,
-        jvmTarget = "21"
+        targetCompatibilityLevel = JavaVersion.VERSION_25,
+        jvmTarget = "25"
     )
 )
 
@@ -68,41 +68,40 @@ val isCI = System.getenv("CI") != null
 // CI
 if (isCI) {
     version = System.getenv("CI_BUILD_VERSION")
-    exec {
-        executable = "git"
-        args("config", "--global", "user.email", "love.tangzx@qq.com")
+    providers.exec {
+        workingDir(rootDir)
+        commandLine("git", "config", "--global", "user.email", "love.tangzx@qq.com")
     }
-    exec {
-        executable = "git"
-        args("config", "--global", "user.name", "tangzx")
+    providers.exec {
+        workingDir(rootDir)
+        commandLine("git", "config", "--global", "user.name", "tangzx")
     }
 }
 
 version = "${version}-IDEA${buildVersion}"
 
 fun getRev(): String {
-    val os = ByteArrayOutputStream()
-    exec {
-        executable = "git"
-        args("rev-parse", "HEAD")
-        standardOutput = os
-    }
-    return os.toString().substring(0, 7)
+    return providers.exec {
+        workingDir(rootDir)
+        commandLine("git", "rev-parse", "--short=7", "HEAD")
+    }.standardOutput.asText.get().trim()
 }
 
-task("downloadEmmyDebugger", type = Download::class) {
-    src(arrayOf(
-        "https://github.com/EmmyLua/EmmyLuaDebugger/releases/download/${emmyDebuggerVersion}/darwin-arm64.zip",
-        "https://github.com/EmmyLua/EmmyLuaDebugger/releases/download/${emmyDebuggerVersion}/darwin-x64.zip",
-        "https://github.com/EmmyLua/EmmyLuaDebugger/releases/download/${emmyDebuggerVersion}/linux-x64.zip",
-        "https://github.com/EmmyLua/EmmyLuaDebugger/releases/download/${emmyDebuggerVersion}/win32-x64.zip",
-        "https://github.com/EmmyLua/EmmyLuaDebugger/releases/download/${emmyDebuggerVersion}/win32-x86.zip"
-    ))
+tasks.register<Download>("downloadEmmyDebugger") {
+    src(
+        arrayOf(
+            "https://github.com/EmmyLua/EmmyLuaDebugger/releases/download/${emmyDebuggerVersion}/darwin-arm64.zip",
+            "https://github.com/EmmyLua/EmmyLuaDebugger/releases/download/${emmyDebuggerVersion}/darwin-x64.zip",
+            "https://github.com/EmmyLua/EmmyLuaDebugger/releases/download/${emmyDebuggerVersion}/linux-x64.zip",
+            "https://github.com/EmmyLua/EmmyLuaDebugger/releases/download/${emmyDebuggerVersion}/win32-x64.zip",
+            "https://github.com/EmmyLua/EmmyLuaDebugger/releases/download/${emmyDebuggerVersion}/win32-x86.zip"
+        )
+    )
 
     dest("temp")
 }
 
-task("unzipEmmyDebugger", type = Copy::class) {
+tasks.register<Copy>("unzipEmmyDebugger") {
     dependsOn("downloadEmmyDebugger")
     from(zipTree("temp/win32-x86.zip")) {
         into("windows/x86")
@@ -122,7 +121,7 @@ task("unzipEmmyDebugger", type = Copy::class) {
     destinationDir = file("temp")
 }
 
-task("installEmmyDebugger", type = Copy::class) {
+tasks.register<Copy>("installEmmyDebugger") {
     dependsOn("unzipEmmyDebugger")
     from("temp/windows/x64/") {
         include("emmy_core.dll")
@@ -166,6 +165,7 @@ project(":") {
         intellijPlatform {
             intellijIdeaUltimate(buildVersionData.ideaSDKVersion)
             bundledModule("intellij.spellchecker")
+            testFramework(TestFrameworkType.Platform)
         }
     }
 
@@ -187,26 +187,26 @@ project(":") {
         sandboxContainer.set(layout.buildDirectory.dir("${buildVersionData.ideaSDKShortVersion}/idea-sandbox"))
     }
 
-    task("bunch") {
+    tasks.register("bunch") {
         doLast {
             val rev = getRev()
             // reset
-            exec {
+            providers.exec {
                 executable = "git"
                 args("reset", "HEAD", "--hard")
             }
             // clean untracked files
-            exec {
+            providers.exec {
                 executable = "git"
                 args("clean", "-d", "-f")
             }
             // switch
-            exec {
+            providers.exec {
                 executable = if (isWin) "bunch/bin/bunch.bat" else "bunch/bin/bunch"
                 args("switch", ".", buildVersionData.bunch)
             }
             // reset to HEAD
-            exec {
+            providers.exec {
                 executable = "git"
                 args("reset", rev)
             }
@@ -225,13 +225,24 @@ project(":") {
         processResources {
             dependsOn("installEmmyDebugger")
         }
+//        java {
+//            toolchain {
+//                languageVersion.set(JavaLanguageVersion.of(buildVersionData.jvmTarget))
+//            }
+//
+//            sourceCompatibility = buildVersionData.targetCompatibilityLevel
+//            targetCompatibility = buildVersionData.targetCompatibilityLevel
+//        }
 
-        compileKotlin {
+        kotlin {
+            jvmToolchain {
+                languageVersion.set(JavaLanguageVersion.of(buildVersionData.jvmTarget))
+            }
+
             compilerOptions {
                 jvmTarget.set(JvmTarget.fromTarget(buildVersionData.jvmTarget))
             }
         }
-
         patchPluginXml {
             dependsOn("installEmmyDebugger")
             sinceBuild.set(buildVersionData.sinceBuild)
